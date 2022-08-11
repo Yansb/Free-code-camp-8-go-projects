@@ -10,12 +10,12 @@ import (
 )
 
 func main() {
+	db := connectToDb()
+
 	start := time.Now()
 	fileName := "./Excel-Data.xlsx"
 	excelChan := make(chan []*xlsx.Cell)
 	doneChan := make(chan bool)
-
-	db := connectToDb()
 
 	go readExcel(fileName, excelChan)
 	go saveInDB(db, excelChan, doneChan)
