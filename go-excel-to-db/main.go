@@ -6,9 +6,11 @@ import (
 	"github.com/yansb/go-excel-to-db/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"time"
 )
 
 func main() {
+	start := time.Now()
 	fileName := "./Excel-Data.xlsx"
 	excelChan := make(chan []*xlsx.Cell)
 	doneChan := make(chan bool)
@@ -18,6 +20,8 @@ func main() {
 	go readExcel(fileName, excelChan)
 	go saveInDB(db, excelChan, doneChan)
 	<-doneChan
+
+	fmt.Println("time elapsed: ", time.Since(start))
 }
 
 func readExcel(fileName string, channel chan []*xlsx.Cell) {
@@ -39,8 +43,9 @@ func readExcel(fileName string, channel chan []*xlsx.Cell) {
 }
 
 func saveInDB(db *gorm.DB, rows chan []*xlsx.Cell, done chan bool) {
+	data := make([]*models.Data, 0)
 	for i := range rows {
-		db.Create(&models.Data{
+		data = append(data, &models.Data{
 			WO:       i[0].Value,
 			District: i[1].Value,
 			LeadTech: i[2].Value,
@@ -52,6 +57,8 @@ func saveInDB(db *gorm.DB, rows chan []*xlsx.Cell, done chan bool) {
 		})
 		fmt.Printf("saved %s in db: \n", i)
 	}
+
+	db.Create(data)
 	done <- true
 }
 
