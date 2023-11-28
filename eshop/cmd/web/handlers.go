@@ -2,9 +2,19 @@ package main
 
 import (
 	"net/http"
+	"strconv"
+	"time"
 
+	"github.com/Yansb/Go-study-projects/eshop/internal/cards"
 	"github.com/Yansb/Go-study-projects/eshop/internal/models"
+	"github.com/go-chi/chi/v5"
 )
+
+func (app *application) Home(w http.ResponseWriter, r *http.Request) {
+	if err := app.renderTemplate(w, r, "home", nil); err != nil {
+		app.errorLog.Println(err)
+	}
+}
 
 func (app *application) VirtualTerminal(w http.ResponseWriter, r *http.Request) {
 	if err := app.renderTemplate(w, r, "terminal", nil, "stripe-js"); err != nil {
@@ -19,12 +29,83 @@ func (app *application) PaymentSucceeded(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	firstName := r.Form.Get("first-name")
+	lastName := r.Form.Get("last-name")
 	cardHolder := r.Form.Get("cardholder-name")
 	email := r.Form.Get("cardholder-email")
 	paymentIntent := r.Form.Get("payment_intent")
 	paymentMethod := r.Form.Get("payment_method")
 	paymentAmount := r.Form.Get("payment_amount")
 	paymentCurrency := r.Form.Get("payment_currency")
+	widgetID, _ := strconv.Atoi(r.Form.Get("product_id"))
+
+	card := cards.Card{
+		Secret: app.config.stripe.secret,
+		Key:    app.config.stripe.key,
+	}
+
+	pi, err := card.RetrievePaymentIntent(paymentIntent)
+	if err != nil {
+		app.errorLog.Println(err)
+		return
+	}
+
+	pm, err := card.GetPaymentMethod(paymentMethod)
+	if err != nil {
+		app.errorLog.Println(err)
+		return
+	}
+
+	lastFour := pm.Card.Last4
+	expiryMonth := pm.Card.ExpMonth
+	expiryYear := pm.Card.ExpYear
+
+	customerID, err := app.SaveCustomer(firstName, lastName, email)
+	if err != nil {
+		app.errorLog.Println(err)
+		return
+	}
+
+	amount, err := strconv.Atoi(paymentAmount)
+	if err != nil {
+		app.errorLog.Println(err)
+		return
+	}
+
+	txn := models.Transaction{
+		Amount:              amount,
+		Currency:            paymentCurrency,
+		LastFour:            lastFour,
+		BankReturnCode:      pi.LatestCharge.ID,
+		ExpiryMonth:         int(expiryMonth),
+		ExpiryYear:          int(expiryYear),
+		PaymentIntent:       paymentIntent,
+		PaymentMethod:       paymentMethod,
+		TransactionStatusID: 2,
+	}
+
+	txnID, err := app.SaveTransaction(txn)
+	if err != nil {
+		app.errorLog.Println(err)
+		return
+	}
+
+	order := models.Order{
+		WidgetID:      widgetID,
+		TransactionID: txnID,
+		CustomerID:    customerID,
+		StatusID:      1,
+		Quantity:      1,
+		Amount:        amount,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	_, err = app.SaveOrder(order)
+	if err != nil {
+		app.errorLog.Println(err)
+		return
+	}
 
 	data := make(map[string]interface{})
 	data["cardholder"] = cardHolder
@@ -33,6 +114,12 @@ func (app *application) PaymentSucceeded(w http.ResponseWriter, r *http.Request)
 	data["pm"] = paymentMethod
 	data["pa"] = paymentAmount
 	data["pc"] = paymentCurrency
+	data["last_four"] = lastFour
+	data["expiry_month"] = expiryMonth
+	data["expiry_year"] = expiryYear
+	data["bank_return_code"] = pi.LatestCharge.ID
+	data["first_name"] = firstName
+	data["last_name"] = lastName
 
 	if err := app.renderTemplate(w, r, "succeeded", &templateData{
 		Data: data,
@@ -41,13 +128,47 @@ func (app *application) PaymentSucceeded(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+func (app *application) SaveCustomer(firstName string, lastName string, email string) (int, error) {
+	customer := models.Customer{
+		FirstName: firstName,
+		LastName:  lastName,
+		Email:     email,
+	}
+
+	id, err := app.DB.InsertCostumer(customer)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, err
+}
+
+func (app *application) SaveTransaction(transaction models.Transaction) (int, error) {
+	id, err := app.DB.InsertTransaction(transaction)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, err
+}
+
+func (app *application) SaveOrder(order models.Order) (int, error) {
+	id, err := app.DB.InsertOrder(order)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, err
+}
+
 func (app *application) ChargeOnce(w http.ResponseWriter, r *http.Request) {
-	widget := models.Widget{
-		ID:             1,
-		Name:           "Custom Widget",
-		Description:    "A very nice widget",
-		InventoryLevel: 10,
-		Price:          1000,
+	id := chi.URLParam(r, "id")
+	widgetId, _ := strconv.Atoi(id)
+
+	widget, err := app.DB.GetWidget(widgetId)
+	if err != nil {
+		app.errorLog.Println(err)
+		return
 	}
 
 	data := make(map[string]interface{})
