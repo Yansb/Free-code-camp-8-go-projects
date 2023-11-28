@@ -44,63 +44,15 @@
           <span class="visually-hidden">Loading...</span>
         </div>
       </div>
+
+      <input type="hidden" name="payment_intent" id="payment_intent">
+      <input type="hidden" name="payment_method" id="payment_method">
+      <input type="hidden" name="payment_amount" id="payment_amount">
+      <input type="hidden" name="payment_currency" id="payment_currency">
+
 </form>
 {{end}}
 
 {{define "js"}}
-  <script src="https://js.stripe.com/v3/"></script>
-
-  <script>
-    let card;
-    let stripe;
-    const cardMessages = document.getElementById('card-messages');
-    const payButton = document.getElementById('pay-button');
-    const processing = document.getElementById('processing-payment');
-
-    stripe = Stripe('pk_test_sYfSqQMRBXLAzfFcoszflMuj0028QEtbKZ')
-
-    function hidePayButton() {
-      payButton.classList.add('d-none');
-      processing.classList.remove('d-none');
-    }
-
-    function val(){
-      let form = document.getElementById('charge_form');
-      if(form.checkValidity() === false){
-        this.event.preventDefault();
-        this.event.stopPropagation();
-        form.classList.add('was-validated');
-        return;
-      }
-      form.classList.add('was-validated');
-      hidePayButton();
-    }
-
-    (() => {
-      const elements = stripe.elements();
-      const style = {
-        base: {
-          fontSize: '16px',
-          lineHeight: '24px'
-        }
-      };
-
-      card = elements.create('card', {
-        style: style,
-        hidePostalCode: true
-      });
-      card.mount('#card-element');
-      card.addEventListener('change', (event) => {
-        var displayError = document.getElementById('card-errors');
-        if (event.error) {
-          displayError.classList.remove('d-none');
-          displayError.textContent = event.error.message;
-        } else {
-          displayError.classList.add('d-none');
-          displayError.textContent = '';
-        }
-      })
-    })();
-
-  </script>
+  {{template "stripe-js" .}}
 {{end}}
