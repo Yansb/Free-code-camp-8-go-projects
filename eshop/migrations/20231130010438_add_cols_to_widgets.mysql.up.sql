@@ -1,0 +1,3 @@
+ALTER TABLE widgets
+  ADD COLUMN `is_recurring` TINYINT(1) NOT NULL DEFAULT 0,
+  ADD COLUMN `plan_id` VARCHAR(50) NULL DEFAULT '';
